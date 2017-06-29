@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE listofactions SYSTEM "actions.dtd">
+<listofactions>
+    <objecttype name="pts" class="wt.fc.Persistable">
+
+        <action name="ptsAlignVersion" resourceBundle="com.ptc.netmarkets.model.modelResource">
+            <label>Выравнить версию</label>
+            <command class="ru.pts.estdex.mvc.processors.actions.AlignVersionProcessor"
+                     url="netmarkets/jsp/ru/pts/estdex/actions/alignVersionWizard.jsp"
+                     windowType="popup"
+                     method="execute"/>
+        </action>
+
+        <action name="pts-table-promotion-objects"
+                id="pts-table-promotion-objects"
+                preloadWizardPage="false">
+            <command windowType="wizard_step" url="netmarkets/jsp/ru/pts/estdex/actions/tablePromotionObjects.jsp"/>
+        </action>
+
+    </objecttype>
+
+</listofactions>
