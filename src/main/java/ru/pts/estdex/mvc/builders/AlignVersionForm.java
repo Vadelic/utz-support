@@ -5,21 +5,20 @@ import com.ptc.core.meta.common.TypeIdentifier;
 import com.ptc.core.meta.common.TypeIdentifierHelper;
 import com.ptc.jca.mvc.components.JcaComponentParams;
 import com.ptc.mvc.components.*;
+import com.ptc.netmarkets.util.beans.NmCommandBean;
 import com.ptc.netmarkets.util.beans.NmHelperBean;
+import com.ptc.windchill.enterprise.maturity.commands.PromotionItemQueryCommands;
 import wt.enterprise.RevisionControlled;
 import wt.fc.Persistable;
-import wt.fc.ReferenceFactory;
 import wt.fc.collections.WTHashSet;
 import wt.part.WTPart;
 import wt.util.WTException;
 
-import javax.servlet.ServletRequest;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.List;
 import java.util.Properties;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * by Komyshenets on 30.02.2017.
@@ -45,6 +44,7 @@ public class AlignVersionForm extends AbstractComponentBuilder {
             table.addComponent(getColumn(DescriptorConstants.ColumnIdentifiers.SHARE_STATUS_FAMILY, factory));
             table.addComponent(getColumn(DescriptorConstants.ColumnIdentifiers.CHANGE_STATUS_FAMILY, factory));
             table.addComponent(getColumn(DescriptorConstants.ColumnIdentifiers.ICON, factory));
+            table.addComponent(getColumn(DescriptorConstants.ColumnIdentifiers.FORMAT_ICON, factory));
 
             ColumnConfig columnNumber = getColumn(DescriptorConstants.ColumnIdentifiers.NUMBER, factory);
             columnNumber.setInfoPageLink(true);
@@ -66,6 +66,8 @@ public class AlignVersionForm extends AbstractComponentBuilder {
             chooseFile.setInfoPageLink(true);
             chooseFile.setDataUtilityId("chooseFile");
             table.addComponent(chooseFile);
+
+
         }
         return table;
     }
@@ -79,28 +81,21 @@ public class AlignVersionForm extends AbstractComponentBuilder {
 
     @Override
     public Object buildComponentData(ComponentConfig componentConfig, ComponentParams componentParams) throws Exception {
+        WTHashSet result = new WTHashSet();
 
         NmHelperBean helperBean = ((JcaComponentParams) componentParams).getHelperBean();
-        ServletRequest request = helperBean.getRequest();
-        String[] soids = (String[]) request.getParameterMap().get("soid");
+        NmCommandBean commandBean = helperBean.getNmCommandBean();
+        List<Object> promotionItems = PromotionItemQueryCommands.getPromotionItems(commandBean);
 
-        WTHashSet wtHashSet = new WTHashSet();
 
-        for (String oid : soids) {
-            Pattern pattern = Pattern.compile("([^$]+)!\\*$");
-            Matcher matcher = pattern.matcher(oid);
-            if (matcher.find()) {
-                int i = matcher.groupCount();
-                String group = matcher.group(i);
-                Persistable persistable = new ReferenceFactory().getReference(group).getObject();
-                if (validType(persistable)&& !(persistable instanceof WTPart)) {
-                    wtHashSet.add(persistable);
-                } else {
-                    System.out.println("AlignVersion - " + persistable.getClass() + "include in file exceptClasses.properties");
-                }
+        for (Object oid : promotionItems) {
+            if (validType((Persistable) oid) && !(oid instanceof WTPart)) {
+                result.add(oid);
+            } else {
+                System.out.println("AlignVersion - " + oid.getClass() + " include in file exceptClasses.properties");
             }
         }
-        return wtHashSet;
+        return result;
     }
 
     private boolean validType(Persistable persistable) {

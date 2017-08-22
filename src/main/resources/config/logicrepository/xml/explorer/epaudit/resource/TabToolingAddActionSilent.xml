@@ -1,0 +1,34 @@
+<?xml version="1.0" standalone="no" ?>
+<!DOCTYPE LogicRepository SYSTEM "/config/logicrepository/dtd/LogicRepository.dtd">
+<LogicRepository>
+
+   <ExplorerElementGroup>
+      <LogicContext application="ptc.mpm.ProcessPlanExplorer"/>
+    <ActionDefinition id="ptc.cust.AddConsumableResourceToOperationAssocActionSilent"
+                          actionClass="ru.pts.base.actions.PtsOperationResourceAssociationAction">
+            <StructureAuthorAction>
+                <Import id="ptc.mpm.exp.OperationToConsumableResourceSD"/>
+            </StructureAuthorAction>
+            <Import id="ptc.wnc.exp.IsParentValidForEditChangeVAL"/>
+            <HelpEntry id="ptc.wnc.exp.SearchHelpId" key="SEARCH_HELP"/>
+        </ActionDefinition>
+		
+      <ActionAccess id="ptc.mpm.ppe.OperationToConsumableResourceAA">
+         <MenuBar id="MenuBar">
+            <Menu id="Menu">
+               <MenuItem id="AddConsumableResourceToOperationAssocMI">
+                  <Label imageName="com/ptc/windchill/explorer/config/images/add16x16.gif">
+                     <Resource key="addConsumableLabel"/>
+                  </Label>
+                  <ToolTip>
+                     <Resource key="addConsumableToolTip"/>
+                  </ToolTip>
+                  <Import id="ptc.cust.AddConsumableResourceToOperationAssocActionSilent"/>
+               </MenuItem>                        
+            </Menu>
+         </MenuBar>
+ </ActionAccess>
+
+	  </ExplorerElementGroup>
+
+</LogicRepository>

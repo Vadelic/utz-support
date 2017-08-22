@@ -19,8 +19,15 @@ public class AlignVersionDataUtility extends AbstractDataUtility {
         VersionIdentifier versionIdentifier = VersionControlHelper.getVersionIdentifier((Versioned) o);
         String value = versionIdentifier.getValue();
 
-        comp.setValue(String.valueOf(Integer.valueOf(value) + 1));
+        String result;
+        try {
+            Integer integer = Integer.valueOf(value);
+            result = String.valueOf(++integer);
+        } catch (NumberFormatException e) {
+            result = String.valueOf(0);
+        }
 
+        comp.setValue(result);
         return comp;
     }
 }

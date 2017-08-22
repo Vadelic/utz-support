@@ -1,4 +1,4 @@
-package ru.pts.estdex.validator;
+package pts.estdex.validator;
 
 import com.ptc.core.ui.validation.DefaultUIComponentValidator;
 import com.ptc.core.ui.validation.UIValidationCriteria;

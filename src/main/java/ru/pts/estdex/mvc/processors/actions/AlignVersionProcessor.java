@@ -11,6 +11,7 @@ import com.ptc.netmarkets.model.NmOid;
 import com.ptc.netmarkets.util.beans.NmCommandBean;
 import com.ptc.netmarkets.util.misc.NmContext;
 import com.ptc.windchill.mpml.resource.MPMTooling;
+import org.apache.commons.io.FilenameUtils;
 import wt.associativity.EquivalenceLink;
 import wt.content.*;
 import wt.doc.WTDocument;
@@ -21,13 +22,14 @@ import wt.fc.collections.WTKeyedMap;
 import wt.part.WTPart;
 import wt.part.WTPartHelper;
 import wt.pom.Transaction;
+import wt.session.SessionHelper;
 import wt.util.WTException;
+import wt.vc.Iterated;
 import wt.vc.VersionControlHelper;
 import wt.vc.VersionIdentifier;
 import wt.vc.Versioned;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
@@ -70,11 +72,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         Transaction transaction = new Transaction();
         try {
             transaction.start();
-            for (Object entry : mapTargetObjects.entrySet()) {
-                WTKeyedMap.WTEntry wtEntry = (WTKeyedHashMap.WTEntry) entry;
-                ObjectReference key = (ObjectReference) wtEntry.getKey();
-                VersionControlHelper.service.changeRevision((Versioned) key.getObject(), wtEntry.getValue().toString());
-            }
+
 
             for (Object entry : mapTargetObjectsAndFiles.entrySet()) {
                 WTKeyedMap.WTEntry wtEntry = (WTKeyedHashMap.WTEntry) entry;
@@ -93,10 +91,32 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
                         applicationData.setRole(ContentRoleType.PRIMARY);
                     } else {
                         applicationData = (ApplicationData) primaryContent;
+                        primaryContent.setModifiedBy(SessionHelper.manager.getPrincipalReference());
                     }
                     applicationData.setFileName(fileName);
-                    ContentServerHelper.service.updateContent((ContentHolder) targetObject, applicationData, new FileInputStream(file));
+                    {
+                        String extension = FilenameUtils.getExtension(fileName).toUpperCase();
+                        DataFormat formatByName = null;
+                        try {
+                            formatByName = ContentHelper.service.getFormatByName(extension);
+                        } catch (WTException ignored) {
+                        }
+                        if (formatByName != null)
+                            applicationData.setFormat(DataFormatReference.newDataFormatReference(formatByName));
+                        if (targetObject instanceof _FormatContentHolder)
+                            ((_FormatContentHolder) targetObject).setFormat(DataFormatReference.newDataFormatReference(formatByName));
+                    }
+                    {
+                        VersionControlHelper.setIterationModifier((Iterated) targetObject, SessionHelper.manager.getPrincipalReference());
+                        PersistenceServerHelper.manager.update(targetObject);
+                    }
                 }
+            }
+
+            for (Object entry : mapTargetObjects.entrySet()) {
+                WTKeyedMap.WTEntry wtEntry = (WTKeyedHashMap.WTEntry) entry;
+                ObjectReference key = (ObjectReference) wtEntry.getKey();
+                VersionControlHelper.service.changeRevision((Versioned) key.getObject(), wtEntry.getValue().toString());
             }
 
 
@@ -129,13 +149,15 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
             HashMap fileUploadMap = (HashMap) map;
             Object file = fileUploadMap.get("fileData$" + targetOidOR);
             String name = ((String[]) nmCommandBean.getParameterMap().get("fileData$" + targetOidOR))[0];
+            if (name.contains("\\"))
+                name = name.substring(name.lastIndexOf("\\") + 1, name.length());
             result.put(name, file);
         }
         return result;
     }
 
     private ArrayList<String> convertToArrayList(Object object) {
-        ArrayList<String> result = new ArrayList<String>();
+        ArrayList<String> result = new ArrayList();
         if (object instanceof String[]) {
             for (String o : (String[]) object) {
                 if (!"".equals(o)) {
@@ -193,20 +215,33 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         return result;
     }
 
-
     private WTKeyedHashMap checkVersion(Persistable persistable, Object newVersion) throws WTException {
         WTKeyedHashMap result = new WTKeyedHashMap();
 
         VersionIdentifier versionIdentifier = VersionControlHelper.getVersionIdentifier((Versioned) persistable);
-        String value = versionIdentifier.getValue();
-        if (Integer.valueOf(newVersion.toString()) > Integer.valueOf(value))
-            result.put(persistable, newVersion);
-        else if (Integer.valueOf(newVersion.toString()) < Integer.valueOf(value)) {
-            throw new WTException("У объекта " + ((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()) + " текущая версия выше чем желаемая");
+        String versionValue = versionIdentifier.getValue();
+        // TODO: 09.08.2017 check for string value
+        try {
+            Integer integerNewVersion = Integer.valueOf(newVersion.toString());
+            Integer integerVersionValue = Integer.valueOf(versionValue);
+
+            if (integerNewVersion > integerVersionValue)
+                result.put(persistable, newVersion);
+
+            else if (integerNewVersion < integerVersionValue) {
+                throw new WTException("У объекта " + ((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()) + " текущая версия выше чем желаемая");
+            }
+
+        } catch (NumberFormatException e) {
+            e.printStackTrace();
+//            if (newVersion.toString().compareTo(versionValue) < 0)
+//                result.put(persistable, newVersion);
+//            else if (newVersion.toString().compareTo(versionValue) > 0) {
+//                throw new WTException("У объекта " + ((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()) + " текущая версия выше чем желаемая");
+//            }
         }
         return result;
     }
-
 
     private boolean checkValidType(Persistable persistable) {
         try {
