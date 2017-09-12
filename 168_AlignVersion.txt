@@ -1,0 +1,39 @@
+1.1
+в файл
+    codebase\config\actions\PromotionRequest-actionmodels.xml
+в группу
+    <model name="promotionRequest promotionItems table">
+добавить строку
+        <action name="ptsAlignVersion" type="pts" shortcut="true"/>
+
+1.2
+в файл
+    codebase\config\actions\custom-actions.xml
+в группу
+    <listofactions>
+добавить строку
+    <include href="ru/pts/estdex/estdex-persistable-actions.xml"/>
+
+2.
+в файл
+    codebase\com\ptc\core\components\components.dataUtilities.properties.xconf
+в группу
+     <Service name="com.ptc.core.components.descriptor.DataUtility">
+добавить
+    <Option serviceClass = "ru.pts.estdex.dataUtilities.AlignVersionDataUtility"
+    requestor="java.lang.Object"
+    selector="newVersion"
+    cardinality="singleton"/>
+
+    <Option serviceClass = "ru.pts.estdex.dataUtilities.AlignVersionChooseFileDataUtility"
+    requestor="java.lang.Object"
+    selector="chooseFile"
+    cardinality="singleton"/>
+выполнить:
+    xconfmanager -p -F
+
+
+3. Установить валидатор
+@xconfmanager -t codebase/service.properties -s "wt.services/svc/default/com.ptc.core.ui.validation.UIComponentValidator/ptsAlignVersion/null/0=ru.pts.estdex.validator.UserGroupValidator/duplicate" -p
+
+

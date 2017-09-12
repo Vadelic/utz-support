@@ -30,6 +30,7 @@ import wt.vc.VersionIdentifier;
 import wt.vc.Versioned;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
@@ -88,25 +89,30 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
                     ContentItem primaryContent = ContentHelper.service.getPrimaryContent(ObjectReference.newObjectReference(targetObject));
                     if (primaryContent == null) {
                         applicationData = ApplicationData.newApplicationData((ContentHolder) targetObject);
-                        applicationData.setRole(ContentRoleType.PRIMARY);
                     } else {
-                        applicationData = (ApplicationData) primaryContent;
                         primaryContent.setModifiedBy(SessionHelper.manager.getPrincipalReference());
+                        applicationData = (ApplicationData) primaryContent;
                     }
+                    applicationData.setRole(ContentRoleType.PRIMARY);
                     applicationData.setFileName(fileName);
                     {
-                        String extension = FilenameUtils.getExtension(fileName).toUpperCase();
-                        DataFormat formatByName = null;
+                        DataFormatReference dataFormatReference = null;
                         try {
-                            formatByName = ContentHelper.service.getFormatByName(extension);
+                            String extension = FilenameUtils.getExtension(fileName).toUpperCase();
+                            DataFormat formatByName = ContentHelper.service.getFormatByName(extension);
+                            dataFormatReference = DataFormatReference.newDataFormatReference(formatByName);
                         } catch (WTException ignored) {
                         }
-                        if (formatByName != null)
-                            applicationData.setFormat(DataFormatReference.newDataFormatReference(formatByName));
-                        if (targetObject instanceof _FormatContentHolder)
-                            ((_FormatContentHolder) targetObject).setFormat(DataFormatReference.newDataFormatReference(formatByName));
+                        if (dataFormatReference != null) {
+                            applicationData.setFormat(dataFormatReference);
+                            if (targetObject instanceof _FormatContentHolder) {
+                                ((_FormatContentHolder) targetObject).setFormat(dataFormatReference);
+                            }
+                        }
                     }
+                    ContentServerHelper.service.updateContent((ContentHolder) targetObject, applicationData, new FileInputStream(file));
                     {
+
                         VersionControlHelper.setIterationModifier((Iterated) targetObject, SessionHelper.manager.getPrincipalReference());
                         PersistenceServerHelper.manager.update(targetObject);
                     }
@@ -214,6 +220,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         }
         return result;
     }
+
 
     private WTKeyedHashMap checkVersion(Persistable persistable, Object newVersion) throws WTException {
         WTKeyedHashMap result = new WTKeyedHashMap();
