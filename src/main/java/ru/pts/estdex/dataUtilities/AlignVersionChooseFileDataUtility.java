@@ -1,4 +1,4 @@
-package pts.estdex.dataUtilities;
+package ru.pts.estdex.dataUtilities;
 
 import com.ptc.core.components.descriptor.ModelContext;
 import com.ptc.core.components.factory.AbstractDataUtility;

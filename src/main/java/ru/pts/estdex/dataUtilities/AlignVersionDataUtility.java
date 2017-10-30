@@ -17,17 +17,7 @@ public class AlignVersionDataUtility extends AbstractDataUtility {
         NumericalTextBox comp = new NumericalTextBox();
         comp.setMaxLength(3);
         VersionIdentifier versionIdentifier = VersionControlHelper.getVersionIdentifier((Versioned) o);
-        String value = versionIdentifier.getValue();
-
-        String result;
-        try {
-            Integer integer = Integer.valueOf(value);
-            result = String.valueOf(++integer);
-        } catch (NumberFormatException e) {
-            result = String.valueOf(0);
-        }
-
-        comp.setValue(result);
+        comp.setValue(versionIdentifier.getValue());
         return comp;
     }
 }

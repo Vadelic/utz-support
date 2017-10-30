@@ -2,6 +2,7 @@ package ru.pts.estdex.mvc.processors.actions;
 
 import com.ptc.core.components.beans.ObjectBean;
 import com.ptc.core.components.forms.DefaultObjectFormProcessor;
+import com.ptc.core.components.forms.FormProcessingStatus;
 import com.ptc.core.components.forms.FormResult;
 import com.ptc.core.components.util.FeedbackMessage;
 import com.ptc.core.meta.common.TypeIdentifier;
@@ -17,17 +18,20 @@ import wt.content.*;
 import wt.doc.WTDocument;
 import wt.enterprise.RevisionControlled;
 import wt.fc.*;
+import wt.fc.collections.WTHashSet;
 import wt.fc.collections.WTKeyedHashMap;
 import wt.fc.collections.WTKeyedMap;
 import wt.part.WTPart;
 import wt.part.WTPartHelper;
 import wt.pom.Transaction;
+import wt.series.MultilevelSeries;
+import wt.series.SeriesHelper;
+import wt.series.SeriesServerHelper;
 import wt.session.SessionHelper;
 import wt.util.WTException;
-import wt.vc.Iterated;
-import wt.vc.VersionControlHelper;
-import wt.vc.VersionIdentifier;
-import wt.vc.Versioned;
+import wt.util.WTPropertyVetoException;
+import wt.vc.*;
+import wt.vc.views.ViewReference;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -74,7 +78,6 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         try {
             transaction.start();
 
-
             for (Object entry : mapTargetObjectsAndFiles.entrySet()) {
                 WTKeyedMap.WTEntry wtEntry = (WTKeyedHashMap.WTEntry) entry;
                 ObjectReference key = (ObjectReference) wtEntry.getKey();
@@ -112,7 +115,6 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
                     }
                     ContentServerHelper.service.updateContent((ContentHolder) targetObject, applicationData, new FileInputStream(file));
                     {
-
                         VersionControlHelper.setIterationModifier((Iterated) targetObject, SessionHelper.manager.getPrincipalReference());
                         PersistenceServerHelper.manager.update(targetObject);
                     }
@@ -122,7 +124,14 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
             for (Object entry : mapTargetObjects.entrySet()) {
                 WTKeyedMap.WTEntry wtEntry = (WTKeyedHashMap.WTEntry) entry;
                 ObjectReference key = (ObjectReference) wtEntry.getKey();
-                VersionControlHelper.service.changeRevision((Versioned) key.getObject(), wtEntry.getValue().toString());
+                // TODO: 27.09.2017 change Revision hire
+//                try {
+                ChangeRevisionForViewHelper.changeRevision((Versioned) key.getObject(), wtEntry.getValue().toString(), false);
+//                        VersionControlHelper.service.changeRevision((Versioned) key.getObject(), wtEntry.getValue().toString());
+//                } catch (VersionControlException vce) {
+//                    System.out.println(vce.getLocalizedMessage());
+////                    changeRevision((Versioned) key.getObject(), wtEntry.getValue().toString());
+//                }
             }
 
 
@@ -135,15 +144,38 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
             transaction.commit();
             return formResult;
         } catch (Exception e) {
+            transaction.rollback();
+            e.printStackTrace();
             FormResult formResult = new FormResult();
-            String msg = "Версии изменить не удалось";
+            String msg = e.getLocalizedMessage();
             FeedbackMessage message = new FeedbackMessage(FeedbackType.FAILURE, null, null, null, new String[]{msg});
             formResult.addFeedbackMessage(message);
+            formResult.setStatus(FormProcessingStatus.FAILURE);
             formResult.setSkipPageRefresh(true);
 
-            transaction.rollback();
             return formResult;
         }
+    }
+
+    private void changeRevision(Versioned object, String s) throws WTException, WTPropertyVetoException {
+        MultilevelSeries series = VersionControlHelper.getVersionIdentifier(object).getSeries();
+        series.setValueWithoutValidating(s);
+        SeriesHelper.validateInSeriesRange(series);
+        VersionIdentifier versionIdentifier = VersionIdentifier.newVersionIdentifier(series);
+        String seriesSortId = SeriesServerHelper.getSeriesSortId(series);
+        versionIdentifier.setVersionSortId(seriesSortId);
+        WTHashSet set = new WTHashSet();
+
+        QueryResult queryResult = VersionControlHelper.service.allIterationsFrom(object);
+        while (queryResult.hasMoreElements()) {
+            Versioned versioned = (Versioned) queryResult.nextElement();
+            if (VersionControlHelper.inSameBranch(object, versioned)) {
+                VersionControlServerHelper.setVersionIdentifier(versioned, versionIdentifier, false);
+                set.add(versioned);
+            }
+        }
+        PersistenceServerHelper.manager.update(set, true);
+
     }
 
     private HashMap getNewFiles(NmCommandBean nmCommandBean, NmOid targetOid) throws WTException {
@@ -162,92 +194,144 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         return result;
     }
 
-    private ArrayList<String> convertToArrayList(Object object) {
-        ArrayList<String> result = new ArrayList();
-        if (object instanceof String[]) {
-            for (String o : (String[]) object) {
-                if (!"".equals(o)) {
-                    result.add(o);
-                }
-            }
-        }
-        return result;
-    }
 
     private WTKeyedHashMap compileTargetObjects(String oid, Object newVersion, boolean addLinkedParts, boolean addLinkedTooling) throws WTException {
         WTKeyedHashMap mapTargetObject = new WTKeyedHashMap();
 
         if (newVersion == null || "".equals(newVersion)) return mapTargetObject;
         Persistable persistable = new ReferenceFactory().getReference(oid).getObject();
-        mapTargetObject.putAll(checkVersion(persistable, newVersion));
+        mapTargetObject.putAll(checkVersion(null, persistable, newVersion));
 
         if (addLinkedParts && persistable instanceof WTDocument && checkValidType(persistable)) {
             mapTargetObject.putAll(getAllLinkedParts((WTDocument) persistable, newVersion));
         }
         if (addLinkedTooling) {
-            WTKeyedHashMap eqTooling = new WTKeyedHashMap();
-
-            for (Object o : mapTargetObject.keySet()) {
-                Persistable object = ((ObjectReference) o).getObject();
-                if (object instanceof WTPart) {
-                    eqTooling.putAll(getAllEquivalenceTooling((WTPart) object, newVersion));
-                }
-            }
-            mapTargetObject.putAll(eqTooling);
+            mapTargetObject.putAll(getAllLinkedTools((WTDocument) persistable, newVersion));
+//
+//            WTKeyedHashMap eqTooling = new WTKeyedHashMap();
+//
+//            for (Object o : mapTargetObject.keySet()) {
+//                Persistable object = ((ObjectReference) o).getObject();
+//                if (object instanceof WTPart) {
+//                    eqTooling.putAll(getAllEquivalenceTooling((WTPart) object, newVersion));
+//                }
+//            }
+//            mapTargetObject.putAll(eqTooling);
         }
         return mapTargetObject;
+    }
+
+    private Map getAllLinkedTools(WTDocument persistable, Object newVersion) throws WTException {
+        WTKeyedHashMap result = new WTKeyedHashMap();
+        QueryResult describesWTParts = WTPartHelper.service.getDescribesWTParts(persistable);
+        while (describesWTParts.hasMoreElements()) {
+            Object o = describesWTParts.nextElement();
+            if (o.getClass().getName().contains(MPMTooling.class.getName())) {
+                MPMTooling part = (MPMTooling) o;
+                part = (MPMTooling) getLastRevision(part);
+                if (part != null)
+                    result.putAll(checkVersion(persistable, part, newVersion));
+            }
+        }
+        return result;
     }
 
     private Map getAllLinkedParts(WTDocument document, Object newVersion) throws WTException {
         WTKeyedHashMap result = new WTKeyedHashMap();
         QueryResult describesWTParts = WTPartHelper.service.getDescribesWTParts(document);
         while (describesWTParts.hasMoreElements()) {
-            WTPart o = (WTPart) describesWTParts.nextElement();
-            if (o.getClass().getName().contains(WTPart.class.getName()))
-                result.putAll(checkVersion(o, newVersion));
+            Object o = describesWTParts.nextElement();
+            if (o.getClass().getName().contains(WTPart.class.getName())) {
+                WTPart part = (WTPart) o;
+                part = (WTPart) getLastRevision(part);
+                if (part != null)
+                    result.putAll(checkVersion(document, part, newVersion));
+            }
         }
         return result;
     }
 
-    private Map getAllEquivalenceTooling(WTPart part, Object newVersion) throws WTException {
+    private Versioned getLastRevision(Versioned part) throws WTException {
+        QueryResult allVersions = VersionControlHelper.service.allVersionsOf(part.getMaster(), false);
+        HashSet<Integer> allRevisionValue = getAllRevisionValue(allVersions, part);
+        VersionIdentifier versionIdentifier = VersionControlHelper.getVersionIdentifier(part);
+        Integer value = Integer.valueOf(versionIdentifier.getValue());
+        if (value.equals(Collections.max(allRevisionValue))) {
+            return part;
+        }
+        return null;
+    }
+
+    private Map getAllEquivalenceTooling(Persistable parent, WTPart part, Object newVersion) throws WTException {
         WTKeyedHashMap result = new WTKeyedHashMap();
         QueryResult equivalence = PersistenceHelper.navigate(part, EquivalenceLink.ROLE_BOBJECT_ROLE, EquivalenceLink.class, true);
 
         while (equivalence.hasMoreElements()) {
             Object o = equivalence.nextElement();
             if (o instanceof MPMTooling)
-                result.putAll(checkVersion((Persistable) o, newVersion));
+                result.putAll(checkVersion(parent, (Persistable) o, newVersion));
         }
         return result;
     }
 
 
-    private WTKeyedHashMap checkVersion(Persistable persistable, Object newVersion) throws WTException {
+    private WTKeyedHashMap checkVersion(Persistable parent, Persistable persistable, Object newVersionObj) throws WTException {
         WTKeyedHashMap result = new WTKeyedHashMap();
-
-        VersionIdentifier versionIdentifier = VersionControlHelper.getVersionIdentifier((Versioned) persistable);
-        String versionValue = versionIdentifier.getValue();
-        // TODO: 09.08.2017 check for string value
+        QueryResult queryResult = VersionControlHelper.service.allVersionsOf((Versioned) persistable);
         try {
-            Integer integerNewVersion = Integer.valueOf(newVersion.toString());
-            Integer integerVersionValue = Integer.valueOf(versionValue);
+            // TODO: 09.08.2017 check for string value
+            Integer validVersion = getValidVersion(queryResult, persistable);
+            Integer newVersion = Integer.valueOf(newVersionObj.toString());
 
-            if (integerNewVersion > integerVersionValue)
+            if (newVersion > validVersion)
                 result.put(persistable, newVersion);
 
-            else if (integerNewVersion < integerVersionValue) {
-                throw new WTException("У объекта " + ((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()) + " текущая версия выше чем желаемая");
+            else if (newVersion <= validVersion) {
+                StringBuilder stringBuilder = new StringBuilder();
+                if (parent != null)
+                    stringBuilder
+                            .append("(")
+                            .append(((RevisionControlled) parent).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()))
+                            .append(")\n");
+                stringBuilder
+                        .append("У объекта ")
+                        .append(((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()))
+                        .append(" текущая версия выше или равна желаемой");
+                throw new WTException(stringBuilder.toString());
             }
 
         } catch (NumberFormatException e) {
             e.printStackTrace();
-//            if (newVersion.toString().compareTo(versionValue) < 0)
-//                result.put(persistable, newVersion);
-//            else if (newVersion.toString().compareTo(versionValue) > 0) {
-//                throw new WTException("У объекта " + ((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()) + " текущая версия выше чем желаемая");
-//            }
         }
         return result;
+    }
+
+    private Integer getValidVersion(QueryResult queryResult, Persistable persistable) throws VersionControlException {
+        VersionIdentifier versionId = VersionControlHelper.getVersionIdentifier((Versioned) persistable);
+        Integer currentVersion = Integer.valueOf(versionId.getValue());
+        if (currentVersion == 0)
+            return 0;
+
+        HashSet<Integer> set = getAllRevisionValue(queryResult, persistable);
+        set.remove(currentVersion);
+        if (set.isEmpty()) return 0;
+        Integer max = Collections.max(set);
+        return max;
+    }
+
+    private HashSet<Integer> getAllRevisionValue(QueryResult queryResult, Persistable persistable) throws VersionControlException {
+        HashSet<Integer> set = new HashSet();
+        ViewReference targetView = persistable instanceof WTPart ? ((WTPart) persistable).getView() : null;
+
+        while (queryResult.hasMoreElements()) {
+            Object element = queryResult.nextElement();
+            ViewReference elementView = element instanceof WTPart ? ((WTPart) element).getView() : null;
+            if (elementView == null || elementView.equals(targetView)) {
+                VersionIdentifier versionIdentifier = VersionControlHelper.getVersionIdentifier((Versioned) element);
+                set.add(Integer.valueOf(versionIdentifier.getValue()));
+            }
+        }
+        return set;
     }
 
     private boolean checkValidType(Persistable persistable) {
@@ -275,7 +359,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         validTypes.load(readerProp);
     }
 
-    private boolean checkSoftType(Object object, String softType) {
+    private boolean checkSoftType(Persistable object, String softType) {
         TypeIdentifier typeIdentifier = TypeIdentifierHelper.getType(object);
         TypeIdentifier root = TypeIdentifierHelper.getTypeIdentifier(softType);
 
