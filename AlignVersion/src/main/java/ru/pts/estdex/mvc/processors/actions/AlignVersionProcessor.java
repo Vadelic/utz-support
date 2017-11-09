@@ -283,20 +283,21 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
             Integer validVersion = getValidVersion(queryResult, persistable);
             Integer newVersion = Integer.valueOf(newVersionObj.toString());
 
-            if (newVersion > validVersion)
+            if (newVersion >= validVersion)
                 result.put(persistable, newVersion);
 
-            else if (newVersion <= validVersion) {
+            else if (newVersion < validVersion) {
                 StringBuilder stringBuilder = new StringBuilder();
-                if (parent != null)
+                if (parent != null) {
                     stringBuilder
                             .append("(")
                             .append(((RevisionControlled) parent).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()))
-                            .append(")\n");
+                            .append(")\n ");
+                }
                 stringBuilder
-                        .append("У объекта ")
+                        .append("У объекта \n")
                         .append(((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()))
-                        .append(" текущая версия выше или равна желаемой");
+                        .append("\n нельзя установить версию ниже "+ validVersion);
                 throw new WTException(stringBuilder.toString());
             }
 
@@ -315,8 +316,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         HashSet<Integer> set = getAllRevisionValue(queryResult, persistable);
         set.remove(currentVersion);
         if (set.isEmpty()) return 0;
-        Integer max = Collections.max(set);
-        return max;
+        return Collections.max(set);
     }
 
     private HashSet<Integer> getAllRevisionValue(QueryResult queryResult, Persistable persistable) throws VersionControlException {
