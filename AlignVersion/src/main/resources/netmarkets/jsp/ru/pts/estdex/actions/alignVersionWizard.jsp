@@ -6,3 +6,17 @@
     <jca:wizardStep action="pts-table-promotion-objects" type="pts" label="Выравниватель версий" />
 </jca:wizard>
 <%@ include file="/netmarkets/jsp/util/end.jspf" %>
+
+<script>
+
+    PTC.wizard.getContentAreaPaddingHeight = PTC.wizard.getContentAreaPaddingHeight.wrap(function(orig) {
+        return orig.call(this) + 12;
+    });
+    Ext.ux.grid.BufferView.prototype.getVisibleRowCount = function(){
+        return 2000;
+    };
+    Ext.override(Ext.ux.grid.BufferView,{
+        doClean: Ext.emptyFn
+    });
+
+</script>

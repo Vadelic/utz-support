@@ -44,7 +44,7 @@ import java.util.*;
  * Created by Komyshenets on 30.03.2017.
  */
 public class AlignVersionProcessor extends DefaultObjectFormProcessor {
-    Properties validTypes = null;
+    private Properties validTypes = null;
 
     @Override
     public FormResult doOperation(NmCommandBean nmCommandBean, List<ObjectBean> list) throws WTException {
@@ -137,7 +137,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
 
             FormResult formResult = new FormResult();
             String msg = mapTargetObjects.isEmpty() ? "Нет объектов для изменения" : "Версии изменились";
-            FeedbackMessage message = new FeedbackMessage(FeedbackType.SUCCESS, null, null, null, new String[]{msg});
+            FeedbackMessage message = new FeedbackMessage(FeedbackType.SUCCESS, null, null, null, msg);
             formResult.addFeedbackMessage(message);
             formResult.setSkipPageRefresh(false);
 
@@ -148,7 +148,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
             e.printStackTrace();
             FormResult formResult = new FormResult();
             String msg = e.getLocalizedMessage();
-            FeedbackMessage message = new FeedbackMessage(FeedbackType.FAILURE, null, null, null, new String[]{msg});
+            FeedbackMessage message = new FeedbackMessage(FeedbackType.FAILURE, null, null, null, msg);
             formResult.addFeedbackMessage(message);
             formResult.setStatus(FormProcessingStatus.FAILURE);
             formResult.setSkipPageRefresh(true);
@@ -179,13 +179,14 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
     }
 
     private HashMap getNewFiles(NmCommandBean nmCommandBean, NmOid targetOid) throws WTException {
-        HashMap result = new HashMap();
+        HashMap<String, Object> result = new HashMap<String, Object>();
 
         String targetOidOR = targetOid.getOidObject().getStringValue();
         Object map = nmCommandBean.getMap().get("fileUploadMap");
         if (map != null) {
             HashMap fileUploadMap = (HashMap) map;
             Object file = fileUploadMap.get("fileData$" + targetOidOR);
+            if (file == null) return result;
             String name = ((String[]) nmCommandBean.getParameterMap().get("fileData$" + targetOidOR))[0];
             if (name.contains("\\"))
                 name = name.substring(name.lastIndexOf("\\") + 1, name.length());
@@ -205,7 +206,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
         if (addLinkedParts && persistable instanceof WTDocument && checkValidType(persistable)) {
             mapTargetObject.putAll(getAllLinkedParts((WTDocument) persistable, newVersion));
         }
-        if (addLinkedTooling) {
+        if (addLinkedTooling && persistable instanceof WTDocument) {
             mapTargetObject.putAll(getAllLinkedTools((WTDocument) persistable, newVersion));
 //
 //            WTKeyedHashMap eqTooling = new WTKeyedHashMap();
@@ -297,7 +298,8 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
                 stringBuilder
                         .append("У объекта \n")
                         .append(((RevisionControlled) persistable).getDisplayIdentifier().getLocalizedMessage(Locale.getDefault()))
-                        .append("\n нельзя установить версию ниже "+ validVersion);
+                        .append("\n нельзя установить версию ниже ")
+                        .append(validVersion);
                 throw new WTException(stringBuilder.toString());
             }
 
@@ -320,7 +322,7 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
     }
 
     private HashSet<Integer> getAllRevisionValue(QueryResult queryResult, Persistable persistable) throws VersionControlException {
-        HashSet<Integer> set = new HashSet();
+        HashSet<Integer> set = new HashSet<Integer>();
         ViewReference targetView = persistable instanceof WTPart ? ((WTPart) persistable).getView() : null;
 
         while (queryResult.hasMoreElements()) {
