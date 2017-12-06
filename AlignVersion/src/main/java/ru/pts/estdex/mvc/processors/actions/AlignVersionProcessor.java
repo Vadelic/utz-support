@@ -244,9 +244,11 @@ public class AlignVersionProcessor extends DefaultObjectFormProcessor {
             Object o = describesWTParts.nextElement();
             if (o.getClass().getName().contains(WTPart.class.getName())) {
                 WTPart part = (WTPart) o;
-                part = (WTPart) getLastRevision(part);
-                if (part != null)
-                    result.putAll(checkVersion(document, part, newVersion));
+                if (!"Технологическое".equals(part.getView().getName())) {
+                    part = (WTPart) getLastRevision(part);
+                    if (part != null)
+                        result.putAll(checkVersion(document, part, newVersion));
+                }
             }
         }
         return result;
